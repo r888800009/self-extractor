@@ -3,36 +3,56 @@ import sys
 import os
 import tempfile
 
-if len(sys.argv) != 2:
+if len(sys.argv) < 2:
     print('./packaging.py file')
+    print('./packaging.py file1 file2 file3 ...')
     sys.exit(1)
 
-name = sys.argv[1]
-f = open(name, "rb")
-data = '\\x' + '\\x'.join(f.read().hex(' ').split())
-
+# Add header
 cfile = """
 #include <stdio.h>
 #include <stdlib.h>
+"""
 
-char data[] = "{}";
-int len = {};
+# Add data
+count = 0
+for name in sys.argv[1:]:
+    print(name)
+    f = open(name, "rb")
+    data = '\\x' + '\\x'.join(f.read().hex(' ').split())
+    cfile += """
+    char data_{}[] = "{}";
+    char name_{}[] = "{}";
+    """.format(count, data, count, name)
+    count += 1
 
-int main() {{
-    FILE *f = fopen("{}", "wb");
-    fwrite(data, sizeof(char), sizeof(data), f);
-    fclose(f);
+
+# extract
+cfile += """
+int main() {
+    FILE *f;
+"""
+
+for i in range(count):
+    cfile += """
+        f = fopen(name_{}, "wb");
+        fwrite(data_{}, sizeof(char), sizeof(data_{}), f);
+        fclose(f);
+    """.format(i, i, i)
+
+cfile += """
     return 0;
-}}
-""".format(data, len(data), name)
+}
+"""
 
+# compiling self extractor
 ctmp = tempfile.NamedTemporaryFile(suffix = '.c', mode = 'w+')
 ctmp.write(cfile)
 
 print(ctmp.name)
+print(cfile)
 
-
-os.system('cat {}'.format(ctmp.name))
+ctmp.flush()
 os.system('gcc {} -o ./packaged'.format(ctmp.name))
 
 ctmp.close()
